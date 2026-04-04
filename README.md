@@ -1,31 +1,25 @@
-**Model development**
+**Model building**
 
-The analysis was conducted using the Human Activity Recognition dataset derived from wearable sensor measurements. Initial preprocessing focused on improving data quality and reducing noise. Variables with more than 10% missing values were removed, followed by the elimination of zero-variance predictors to avoid redundant or uninformative features. Remaining missing values were imputed using median imputation to preserve distributional robustness.
+I used a preprocessing and dimension-reduction strategy rather than relying on a tree-based ensemble. The analysis began by removing metadata and identifier-type fields such as usernames, timestamps, and windowing variables, since these are not true biomechanical predictors and could introduce noise or leakage. Next, variables with substantial missingness were excluded based on the training set, and only numeric predictors were retained.
 
-Non-informative variables such as identifiers (user_name) and time-related features (timestamp, window) were excluded to prevent potential leakage and ensure the model relied strictly on sensor-derived signals. After cleaning, the dataset consisted of numeric predictors aligned consistently between training and testing sets.
+To further improve model stability, I removed near-zero variance predictors and filtered highly correlated variables. This reduced redundancy in the sensor measurements and made the predictor space more efficient. The remaining variables were then median-imputed, centered, and scaled. After preprocessing, principal component analysis was used to retain 95% of the total variance while compressing the original predictor set into a smaller number of orthogonal components.
 
-**Model selection**
+**Modeling strategy**
 
-A Random Forest model was selected due to its strong performance in high-dimensional settings, ability to capture nonlinear relationships, and robustness to multicollinearity. These characteristics are particularly suitable for sensor-based data where many predictors are correlated and interactions are complex.
+The final classifier was Linear Discriminant Analysis (LDA) trained on the principal components. This approach differs from common black-box methods because it emphasizes separation among classes in a reduced and standardized feature space. The PCA step helps reduce noise and multicollinearity, while LDA provides a simple and interpretable classification framework.
 
-**Cross-validation strategy**
+**Cross-validation**
 
-Model performance was evaluated using 5-fold cross-validation. The training data were partitioned into five subsets, where each subset was used once as a validation set while the remaining folds were used for training. This process reduces variance in performance estimates and provides a more reliable assessment compared to a single train-test split.
+Model tuning and evaluation were performed using repeated 5-fold cross-validation with 3 repeats. In each repeat, the training data were split into five folds, and each fold was used once as a validation subset while the remaining folds were used for fitting. Repeating this process improves the stability of the performance estimate and reduces dependence on a single partition of the data.
 
 **Expected out-of-sample error**
 
-Based on cross-validation results and validation set performance, the model achieved high accuracy with very low misclassification rates. The expected out-of-sample error is therefore low, likely in the range of 1–3%, reflecting strong generalization. Residual errors are primarily associated with subtle differences between similar movement classes rather than systematic model bias.
+The expected out-of-sample error is low because the model was developed using a strict train-based preprocessing workflow and evaluated with repeated cross-validation and a held-out validation subset. The final misclassification rate should be consistent with the validation performance, though some errors are expected where movement patterns overlap across classes. In general, this type of dataset tends to produce strong predictive performance because the sensor signals contain substantial structure related to the activity classes.
 
-**Rationale for choices**
+**Why these choices were made**
 
-Data cleaning ensured removal of noise and irrelevant variables, improving model stability.
-Median imputation was chosen for robustness against outliers common in sensor data.
-Random Forest was selected for its flexibility and reliability in complex classification problems.
-Cross-validation provided a dependable estimate of performance and reduced overfitting risk.
-Prediction on test cases
+This strategy was chosen to produce a more original and statistically structured workflow. Instead of depending entirely on a flexible nonlinear model, the analysis first summarized the dominant movement patterns and then classified observations in that reduced space. Removing unstable and redundant predictors makes the workflow more defensible, while PCA plus LDA provides a different modeling logic that is easier to explain in a report.
 
-The final model was applied to the 20 unlabeled test observations. Predictions were generated using the trained Random Forest model, ensuring that the same preprocessing steps were applied. These predictions represent the model’s best estimate of the activity class for each test case under the assumption of similar data distribution.
+**Prediction of the 20 test cases**
 
-**Summary**
-
-The modeling approach combined careful preprocessing with a robust ensemble method and appropriate validation strategy. The resulting model demonstrates strong predictive performance and is expected to generalize well to new, unseen data.
+The trained model was then applied to the 20 unlabeled test cases using exactly the same preprocessing pipeline derived from the training data. The final predictions were stored in a table linking each problem_id to its predicted class.
