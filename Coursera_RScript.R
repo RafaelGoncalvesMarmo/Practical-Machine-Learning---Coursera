@@ -1,28 +1,22 @@
 rm(list = ls())
 
-# =========================
-# Libraries
-# =========================
 library(caret)
 library(tidyverse)
+library(ranger)
+library(glmnet)
+library(xgboost)
+library(caretEnsemble)
+library(nnet)
 
-# =========================
-# Load data
-# =========================
 train_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 test_url  <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 
 train <- read.csv(train_url, na.strings = c("NA", "", "#DIV/0!"))
 test  <- read.csv(test_url,  na.strings = c("NA", "", "#DIV/0!"))
 
-# check
 dim(train)
 dim(test)
-str(train)
 
-# =========================
-# Cleaning: NA + Zero Variance
-# =========================
 na_threshold <- 0.10
 
 train_clean <- train %>%
@@ -33,131 +27,153 @@ nzv <- nearZeroVar(train_clean, saveMetrics = TRUE)
 train_clean <- train_clean %>%
   select(-which(nzv$zeroVar))
 
-# check
-dim(train_clean)
-
-# =========================
-# Imputation
-# =========================
-preproc <- preProcess(train_clean, method = "medianImpute")
-
-train_clean <- predict(preproc, train_clean)
-
-# Apply same to test
 predictor_names <- setdiff(colnames(train_clean), "classe")
 test_clean <- test[, predictor_names]
-test_clean <- predict(preproc, test_clean)
 
-# =========================
-# Basic checks
-# =========================
-table(train_clean$classe)
-
-# remove first column
 train_clean <- train_clean[, -1]
 test_clean  <- test_clean[, -1]
 
-# =========================
-# Remove unwanted columns
-# =========================
 remove_cols_train <- grepl("^X|timestamp|window", names(train_clean))
 train_clean <- train_clean[, !remove_cols_train]
 
 remove_cols_test <- grepl("^X|timestamp|window", names(test_clean))
 test_clean <- test_clean[, !remove_cols_test]
 
-# =========================
-# Align predictors
-# =========================
-predictors <- setdiff(names(train_clean), "classe")
-test_clean <- test_clean[, predictors]
-
-# check
-all(names(test_clean) == predictors)
-
-# =========================
-# Remove user_name
-# =========================
-str(train_clean)
-
 train_clean <- train_clean[, !names(train_clean) %in% "user_name"]
 test_clean  <- test_clean[, !names(test_clean) %in% "user_name"]
 
-# =========================
-# Train/Test split
-# =========================
-set.seed(123)
+predictors <- setdiff(names(train_clean), "classe")
+test_clean <- test_clean[, predictors]
 
+pp <- preProcess(
+  train_clean[, predictors],
+  method = c("medianImpute", "center", "scale")
+)
+
+train_x <- predict(pp, train_clean[, predictors])
+test_x  <- predict(pp, test_clean)
+
+train_clean <- cbind(train_x, classe = train_clean$classe)
+train_clean$classe <- factor(train_clean$classe)
+
+set.seed(123)
 inTrain <- createDataPartition(train_clean$classe, p = 0.70, list = FALSE)
 
 trainData <- train_clean[inTrain, ]
 testData  <- train_clean[-inTrain, ]
 
-# =========================
-# Training control
-# =========================
-control <- trainControl(method = "cv", number = 5)
+ctrl <- trainControl(
+  method = "repeatedcv",
+  number = 5,
+  repeats = 2,
+  savePredictions = "final",
+  classProbs = TRUE
+)
 
-# =========================
-# Models
-# =========================
-
-# Random Forest
-modelRf <- train(
+set.seed(123)
+model_list <- caretList(
   classe ~ .,
   data = trainData,
-  method = "rf",
-  trControl = control
+  trControl = ctrl,
+  metric = "Accuracy",
+  tuneList = list(
+    ranger = caretModelSpec(
+      method = "ranger",
+      tuneLength = 5,
+      importance = "impurity"
+    ),
+    glmnet = caretModelSpec(
+      method = "glmnet",
+      tuneLength = 10
+    ),
+    xgbTree = caretModelSpec(
+      method = "xgbTree",
+      tuneGrid = expand.grid(
+        nrounds = c(100, 200),
+        max_depth = c(3, 6),
+        eta = c(0.05, 0.3),
+        gamma = 0,
+        colsample_bytree = c(0.8, 1.0),
+        min_child_weight = 1,
+        subsample = c(0.8, 1.0)
+      )
+    )
+  )
 )
 
-modelRf
+model_list
 
-
-# =========================
-# Predictions
-# =========================
-
-predictRf <- predict(modelRf, newdata = testData)
-confusionMatrix(table(predictRf, testData$classe))
-
-modelRf$finalModel
-
-varImp(modelRf)
-
-ggpairs()
-
-pca <- prcomp(select(train_clean, -classe), scale = TRUE)
-
-pc_df <- data.frame(
-  PC1 = pca$x[,1],
-  PC2 = pca$x[,2],
-  classe = train_clean$classe
+stack_ctrl <- trainControl(
+  method = "repeatedcv",
+  number = 5,
+  repeats = 2,
+  savePredictions = "final",
+  classProbs = TRUE
 )
 
-ggplot(pc_df, aes(PC1, PC2, color = classe)) +
-  geom_point(alpha = 0.6) +
-  theme_minimal()
+set.seed(123)
+stack_model <- caretStack(
+  model_list,
+  method = "multinom",
+  metric = "Accuracy",
+  trControl = stack_ctrl,
+  trace = FALSE
+)
 
+stack_model
 
-# =========================
-# Validation
-# =========================
+pred_ranger <- predict(model_list$ranger, newdata = testData)
+pred_glmnet <- predict(model_list$glmnet, newdata = testData)
+pred_xgb    <- predict(model_list$xgbTree, newdata = testData)
+pred_stack  <- predict(stack_model, newdata = testData)
 
-validation <- predict(modelRf, test_clean)
+pred_ranger <- factor(pred_ranger, levels = levels(testData$classe))
+pred_glmnet <- factor(pred_glmnet, levels = levels(testData$classe))
+pred_xgb    <- factor(pred_xgb,    levels = levels(testData$classe))
+pred_stack  <- factor(pred_stack,  levels = levels(testData$classe))
+
+cm_ranger <- confusionMatrix(pred_ranger, testData$classe)
+cm_glmnet <- confusionMatrix(pred_glmnet, testData$classe)
+cm_xgb    <- confusionMatrix(pred_xgb, testData$classe)
+cm_stack  <- confusionMatrix(pred_stack, testData$classe)
+
+cm_ranger
+cm_glmnet
+cm_xgb
+cm_stack
+
+acc_df <- data.frame(
+  Model = c("ranger", "glmnet", "xgbTree", "stack"),
+  Accuracy = c(
+    cm_ranger$overall["Accuracy"],
+    cm_glmnet$overall["Accuracy"],
+    cm_xgb$overall["Accuracy"],
+    cm_stack$overall["Accuracy"]
+  )
+)
+
+acc_df <- acc_df %>%
+  arrange(desc(Accuracy))
+
+acc_df
+
+best_model_name <- acc_df$Model[1]
+best_model_name
+
+best_model <- switch(
+  best_model_name,
+  ranger = model_list$ranger,
+  glmnet = model_list$glmnet,
+  xgbTree = model_list$xgbTree,
+  stack = stack_model
+)
+
+validation <- predict(best_model, newdata = test_x)
 
 validation_df <- data.frame(
+  problem_id = test$problem_id,
   user_name = test$user_name,
   prediction = validation
 )
 
-head(validation_df)
-length(validation) == nrow(test)
-
-errors <- testData %>%
-  mutate(
-    pred = predictRf,
-    correct = pred == classe
-  ) %>%
-  filter(!correct)
-
-table(errors$classe, errors$pred)
+validation_df
