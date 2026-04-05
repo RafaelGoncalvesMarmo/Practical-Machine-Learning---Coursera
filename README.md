@@ -1,25 +1,108 @@
-**Model building**
+**1. Objective**
 
-I used a preprocessing and dimension-reduction strategy rather than relying on a tree-based ensemble. The analysis began by removing metadata and identifier-type fields such as usernames, timestamps, and windowing variables, since these are not true biomechanical predictors and could introduce noise or leakage. Next, variables with substantial missingness were excluded based on the training set, and only numeric predictors were retained.
+The goal of this analysis was to develop a predictive model capable of classifying exercise execution quality into five categories (A–E) using wearable sensor data. The final model was also used to predict the class labels for 20 unseen test observations.
 
-To further improve model stability, I removed near-zero variance predictors and filtered highly correlated variables. This reduced redundancy in the sensor measurements and made the predictor space more efficient. The remaining variables were then median-imputed, centered, and scaled. After preprocessing, principal component analysis was used to retain 95% of the total variance while compressing the original predictor set into a smaller number of orthogonal components.
+**2. Data preprocessing**
 
-**Modeling strategy**
+The dataset consisted of a large number of sensor-derived variables capturing motion from different body locations. To improve model performance and robustness, several preprocessing steps were applied:
 
-The final classifier was Linear Discriminant Analysis (LDA) trained on the principal components. This approach differs from common black-box methods because it emphasizes separation among classes in a reduced and standardized feature space. The PCA step helps reduce noise and multicollinearity, while LDA provides a simple and interpretable classification framework.
+Variables with more than 10% missing values were removed to retain only stable and consistently recorded features.
+Predictors with zero variance were eliminated, as they do not contribute to discrimination between classes.
+Remaining missing values were imputed using median imputation, which is robust to outliers commonly present in sensor data.
+Non-informative variables such as identifiers (user_name) and time-related variables (timestamp, window) were removed to prevent potential bias and ensure the model relied only on movement signals.
 
-**Cross-validation**
+After preprocessing, the dataset contained 52 predictors used for modeling.
 
-Model tuning and evaluation were performed using repeated 5-fold cross-validation with 3 repeats. In each repeat, the training data were split into five folds, and each fold was used once as a validation subset while the remaining folds were used for fitting. Repeating this process improves the stability of the performance estimate and reduces dependence on a single partition of the data.
+**3. Model selection**
 
-**Expected out-of-sample error**
+A Random Forest classifier was used for this analysis. This method was chosen because:
 
-The expected out-of-sample error is low because the model was developed using a strict train-based preprocessing workflow and evaluated with repeated cross-validation and a held-out validation subset. The final misclassification rate should be consistent with the validation performance, though some errors are expected where movement patterns overlap across classes. In general, this type of dataset tends to produce strong predictive performance because the sensor signals contain substantial structure related to the activity classes.
+It handles high-dimensional data effectively
+It captures nonlinear relationships between predictors
+It is robust to multicollinearity among sensor variables
+It performs well in classification problems with complex interactions
 
-**Why these choices were made**
+**4. Cross-validation**
 
-This strategy was chosen to produce a more original and statistically structured workflow. Instead of depending entirely on a flexible nonlinear model, the analysis first summarized the dominant movement patterns and then classified observations in that reduced space. Removing unstable and redundant predictors makes the workflow more defensible, while PCA plus LDA provides a different modeling logic that is easier to explain in a report.
+Model performance was evaluated using 5-fold cross-validation. The training data were split into five subsets, and each subset was used once as a validation set while the remaining subsets were used for training.
 
-**Prediction of the 20 test cases**
+This approach provides a reliable estimate of model performance and reduces the risk of overfitting to a single data partition.
 
-The trained model was then applied to the 20 unlabeled test cases using exactly the same preprocessing pipeline derived from the training data. The final predictions were stored in a table linking each problem_id to its predicted class.
+**5. Model performance**
+
+The Random Forest model was trained using different values of the tuning parameter mtry (number of variables randomly sampled at each split).
+
+mtry	Accuracy	Kappa
+2	0.9896	0.9868
+27	0.9910	0.9887
+52	0.9857	0.9819
+
+The optimal model was selected with:
+
+mtry = 27
+
+This model achieved a cross-validated accuracy of approximately:
+
+99.1%
+
+**6. Expected out-of-sample error**
+
+Based on cross-validation results and model stability, the expected out-of-sample error is very low, approximately:
+
+< 1%
+
+This indicates strong generalization performance. The high accuracy reflects the strong signal present in the sensor data and the ability of Random Forest to capture complex movement patterns.
+
+**7. Variable importance**
+
+Variable importance analysis identified the most influential predictors in the model:
+
+Top contributors include:
+
+roll_belt (most important)
+pitch_forearm
+yaw_belt
+magnet_dumbbell_z
+pitch_belt
+roll_forearm
+
+These results suggest that:
+
+Movement signals from the belt (core) and forearm play a dominant role in distinguishing exercise quality.
+
+This aligns with the expectation that core stability and arm coordination are key indicators of movement correctness.
+
+**8. Model interpretation**
+
+The model effectively captures relationships across multiple sensor locations, integrating signals from different body parts. The importance of belt and forearm variables indicates that global body coordination, rather than isolated movements, drives classification performance.
+
+**9. Prediction on test data**
+
+The final model was applied to the 20 unlabeled test observations. Predictions were generated using the trained Random Forest model and are shown below:
+
+problem_id	user_name	prediction
+1	pedro	B
+2	jeremy	A
+3	jeremy	B
+4	adelmo	A
+5	eurico	A
+6	jeremy	E
+7	jeremy	D
+8	jeremy	B
+9	carlitos	A
+10	charles	A
+11	carlitos	B
+12	jeremy	C
+13	eurico	B
+14	jeremy	A
+15	jeremy	E
+16	eurico	E
+17	pedro	A
+18	carlitos	B
+19	pedro	B
+20	eurico	B
+10. Conclusion
+
+The Random Forest model demonstrated excellent performance in classifying exercise quality, with very high accuracy and strong generalization capability. The preprocessing strategy ensured that only reliable and informative variables were used, while cross-validation provided a robust estimate of model performance.
+
+The results highlight the importance of coordinated sensor signals, particularly from the belt and forearm, in distinguishing movement patterns. The model was successfully applied to unseen data, producing consistent and interpretable predictions.
