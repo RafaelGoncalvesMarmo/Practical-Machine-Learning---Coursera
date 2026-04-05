@@ -41,15 +41,11 @@ The optimal model was selected with:
 
 mtry = 27
 
-This model achieved a cross-validated accuracy of approximately:
-
-99.1%
+This model achieved a cross-validated accuracy of approximately: 99.1%
 
 **6. Expected out-of-sample error**
 
-Based on cross-validation results and model stability, the expected out-of-sample error is very low, approximately:
-
-< 1%
+Based on cross-validation results and model stability, the expected out-of-sample error is very low, approximately: < 1%
 
 This indicates strong generalization performance. The high accuracy reflects the strong signal present in the sensor data and the ability of Random Forest to capture complex movement patterns.
 
@@ -66,9 +62,7 @@ magnet_dumbbell_z
 pitch_belt
 roll_forearm
 
-These results suggest that:
-
-Movement signals from the belt (core) and forearm play a dominant role in distinguishing exercise quality.
+These results suggest that: Movement signals from the belt (core) and forearm play a dominant role in distinguishing exercise quality.
 
 This aligns with the expectation that core stability and arm coordination are key indicators of movement correctness.
 
